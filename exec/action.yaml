@@ -52,9 +52,9 @@ runs:
         fi
         SCRIPT=$(mktemp)
         printf '%s\n' "$GH_LXD_RUN" > "$SCRIPT"
-        lxc file push "$SCRIPT" "${CONTAINER}/tmp/gh-lxd-exec.sh"
+        lxc file push "$SCRIPT" "${CONTAINER}/var/tmp/gh-lxd-exec.sh"
         rm -f "$SCRIPT"
-        SHELL_CMD="${GH_LXD_SHELL//\{0\}/\/tmp\/gh-lxd-exec.sh}"
+        SHELL_CMD="${GH_LXD_SHELL//\{0\}/\/var\/tmp\/gh-lxd-exec.sh}"
         if [ -n "$CONTAINER_USER" ]; then
           # UID matches the runner's UID, set at container creation time
           lxc exec --user "$(id -u)" "$CONTAINER" -- sh -c "cd '$WORKING_DIR' && $SHELL_CMD"
