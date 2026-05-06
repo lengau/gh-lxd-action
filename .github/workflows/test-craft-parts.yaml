@@ -1,0 +1,67 @@
+name: Test (canonical/craft-parts)
+
+on:
+  push:
+    branches: [main]
+    paths: [launch/**, exec/**, stop/**]
+  pull_request:
+    paths: [launch/**, exec/**, stop/**]
+  workflow_dispatch:
+
+# Tests a real-world Python project with C library dependencies on Ubuntu and
+# Debian. Runs only the unit tests to keep the job time reasonable.
+jobs:
+  test:
+    name: ${{ matrix.distro }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        distro:
+          - ubuntu/22.04
+          - ubuntu/24.04
+          - ubuntu/25.10
+          - ubuntu/26.04
+          - debian/12
+          - debian/13
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Launch container
+        uses: ./launch
+        with:
+          image: ${{ matrix.distro }}
+
+      - name: Install system dependencies
+        uses: ./exec
+        with:
+          run: |
+            apt-get update -y
+            apt-get install -y \
+              git python3 python3-pip python3-venv \
+              libxml2-dev libxslt1-dev intltool
+
+      - name: Clone
+        uses: ./exec
+        with:
+          run: git clone --depth=1 https://github.com/canonical/craft-parts /craft-parts
+
+      - name: Install Python dependencies
+        uses: ./exec
+        with:
+          working-directory: /craft-parts
+          run: |
+            python3 -m venv .venv
+            .venv/bin/pip install --upgrade pip
+            .venv/bin/pip install -e ".[dev]"
+
+      - name: Run unit tests
+        uses: ./exec
+        with:
+          working-directory: /craft-parts
+          run: .venv/bin/pytest tests/unit -x -q
+
+      - name: Stop container
+        if: always()
+        uses: ./stop

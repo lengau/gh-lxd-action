@@ -1,0 +1,73 @@
+name: Test (google/uuid)
+
+on:
+  push:
+    branches: [main]
+    paths: [launch/**, exec/**, stop/**]
+  pull_request:
+    paths: [launch/**, exec/**, stop/**]
+  workflow_dispatch:
+
+# Smoke test across all supported distros: installs Go, clones, and tests a
+# tiny pure-Go library with no external dependencies.
+jobs:
+  test:
+    name: ${{ matrix.distro }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        distro:
+          - ubuntu/22.04
+          - ubuntu/24.04
+          - ubuntu/25.10
+          - ubuntu/26.04
+          - debian/12
+          - debian/13
+          - fedora/43
+          - fedora/44
+          - almalinux/8
+          - almalinux/9
+          - almalinux/10
+          - alpine/3.21
+          - alpine/3.22
+          - alpine/3.23
+          - alpine/3.24
+          - centos/stream9
+          - centos/stream10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Launch container
+        uses: ./launch
+        with:
+          image: ${{ matrix.distro }}
+
+      - name: Install Go and git
+        uses: ./exec
+        with:
+          run: |
+            if command -v apt-get >/dev/null; then
+              apt-get update -y
+              apt-get install -y golang-go git
+            elif command -v dnf >/dev/null; then
+              dnf install -y golang git
+            elif command -v apk >/dev/null; then
+              apk add go git
+            fi
+
+      - name: Clone
+        uses: ./exec
+        with:
+          run: git clone --depth=1 https://github.com/google/uuid /uuid
+
+      - name: Test
+        uses: ./exec
+        with:
+          working-directory: /uuid
+          run: go test ./...
+
+      - name: Stop container
+        if: always()
+        uses: ./stop

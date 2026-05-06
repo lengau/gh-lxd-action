@@ -1,0 +1,63 @@
+name: Run Command in LXD Container
+description: Run a shell script inside a running LXD container.
+
+inputs:
+  container:
+    description: >
+      Name of the container to run the command in. If omitted, auto-detected
+      from the single running container. Required when multiple containers are
+      present on the runner.
+  user:
+    description: >
+      Username to run the command as. If omitted, runs as root.
+      Should match the user created in the launch action.
+  run:
+    description: The command(s) to run. Works the same as the `run` key on a GitHub Actions step.
+    required: true
+  shell:
+    description: >
+      Shell to use to run the script, with {0} replaced by the script path inside
+      the container. Works the same as the `shell` key on a GitHub Actions step.
+    default: bash -e {0}
+  working-directory:
+    description: Working directory inside the container.
+    default: /root/project
+
+runs:
+  using: composite
+  steps:
+    - name: Run command
+      shell: bash
+      env:
+        CONTAINER: ${{ inputs.container }}
+        CONTAINER_USER: ${{ inputs.user }}
+        WORKING_DIR: ${{ inputs.working-directory }}
+        GH_LXD_SHELL: ${{ inputs.shell }}
+        GH_LXD_RUN: ${{ inputs.run }}
+      run: |
+        if [ -z "$CONTAINER" ]; then
+          CONTAINER="${GH_LXD_CONTAINER:-}"
+        fi
+        if [ -z "$CONTAINER" ]; then
+          CONTAINERS=$(lxc list --format csv -c n)
+          COUNT=$(printf '%s\n' "$CONTAINERS" | grep -c .)
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::No LXD containers found." >&2
+            exit 1
+          elif [ "$COUNT" -gt 1 ]; then
+            echo "::error::Multiple LXD containers found; specify the 'container' input." >&2
+            exit 1
+          fi
+          CONTAINER="$CONTAINERS"
+        fi
+        SCRIPT=$(mktemp)
+        printf '%s\n' "$GH_LXD_RUN" > "$SCRIPT"
+        lxc file push "$SCRIPT" "${CONTAINER}/tmp/gh-lxd-exec.sh"
+        rm -f "$SCRIPT"
+        SHELL_CMD="${GH_LXD_SHELL//\{0\}/\/tmp\/gh-lxd-exec.sh}"
+        if [ -n "$CONTAINER_USER" ]; then
+          # UID matches the runner's UID, set at container creation time
+          lxc exec --user "$(id -u)" "$CONTAINER" -- sh -c "cd '$WORKING_DIR' && $SHELL_CMD"
+        else
+          lxc exec "$CONTAINER" -- sh -c "cd '$WORKING_DIR' && $SHELL_CMD"
+        fi

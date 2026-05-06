@@ -1,0 +1,61 @@
+name: CI (Makefile)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: ${{ matrix.distro }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        distro:
+          # Ubuntu LTS and supported interim releases
+          - ubuntu/22.04
+          - ubuntu/24.04
+          - ubuntu/25.10
+          - ubuntu/26.04
+          # Debian stable and oldstable
+          - debian/12
+          - debian/13
+          # Fedora (two most recent releases)
+          - fedora/43
+          - fedora/44
+          # AlmaLinux
+          - almalinux/8
+          - almalinux/9
+          - almalinux/10
+          # Alpine Linux
+          - alpine/3.21
+          - alpine/3.22
+          - alpine/3.23
+          - alpine/3.24
+          # CentOS Stream
+          - centos/stream9
+          - centos/stream10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Launch container
+        uses: <owner>/gh-lxd-action/launch@v1
+        with:
+          image: ${{ matrix.distro }}
+          # $GITHUB_WORKSPACE is mounted into the container at /root/project by default
+
+      - name: Set up dependencies
+        uses: <owner>/gh-lxd-action/exec@v1
+        with:
+          run: make setup
+
+      - name: Run tests
+        uses: <owner>/gh-lxd-action/exec@v1
+        with:
+          run: make test
+
+      - name: Stop container
+        if: always()
+        uses: <owner>/gh-lxd-action/stop@v1

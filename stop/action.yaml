@@ -1,0 +1,34 @@
+name: Stop LXD Container
+description: Stop and delete a LXD container.
+
+inputs:
+  container:
+    description: >
+      Name of the container to stop and delete. If omitted, auto-detected from
+      the single running container. Required when multiple containers are
+      present on the runner.
+
+runs:
+  using: composite
+  steps:
+    - name: Stop and delete container
+      shell: bash
+      env:
+        CONTAINER: ${{ inputs.container }}
+      run: |
+        if [ -z "$CONTAINER" ]; then
+          CONTAINER="${GH_LXD_CONTAINER:-}"
+        fi
+        if [ -z "$CONTAINER" ]; then
+          CONTAINERS=$(lxc list --format csv -c n)
+          COUNT=$(printf '%s\n' "$CONTAINERS" | grep -c .)
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::No LXD containers found." >&2
+            exit 1
+          elif [ "$COUNT" -gt 1 ]; then
+            echo "::error::Multiple LXD containers found; specify the 'container' input." >&2
+            exit 1
+          fi
+          CONTAINER="$CONTAINERS"
+        fi
+        lxc delete --force "$CONTAINER"

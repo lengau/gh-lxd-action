@@ -1,0 +1,77 @@
+name: Launch LXD Container
+description: >
+  Launch a LXD container for CI testing and mount the workspace into it.
+  Ubuntu images use the ubuntu: remote; all others use the images: remote.
+
+inputs:
+  image:
+    description: >
+      Distribution image to use (e.g. ubuntu/22.04, debian/12, fedora/43).
+    required: true
+  name:
+    description: >
+      Name to give the container. If omitted, a random name is generated.
+      Only needed when running multiple containers on the same runner.
+  user:
+    description: >
+      Username to create inside the container. If omitted, commands run as root.
+      The user is created with the same UID as the runner so that workspace file
+      permissions work correctly without any chown.
+
+runs:
+  using: composite
+  steps:
+    - name: Set up LXD
+      uses: canonical/setup-lxd@main
+
+    - name: Launch container
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}
+        CONTAINER: ${{ inputs.name }}
+      run: |
+        DISTRO="${IMAGE%%/*}"
+        VERSION="${IMAGE##*/}"
+        if [ "$DISTRO" = "ubuntu" ]; then
+          LXD_IMAGE="ubuntu:${VERSION}"
+        else
+          LXD_IMAGE="images:${IMAGE}"
+        fi
+        if [ -z "$CONTAINER" ]; then
+          CONTAINER="gh-lxd-$(openssl rand -hex 4)"
+        fi
+        lxc launch "$LXD_IMAGE" "$CONTAINER"
+        echo "GH_LXD_CONTAINER=$CONTAINER" >> "$GITHUB_ENV"
+
+    - name: Mount workspace into container
+      shell: bash
+      run: |
+        lxc config device add "$GH_LXD_CONTAINER" workspace disk \
+          source="$GITHUB_WORKSPACE" \
+          path=/root/project
+
+    - name: Wait for container to be ready
+      shell: bash
+      run: |
+        # cloud-init is not present on all images; ignore failure
+        lxc exec "$GH_LXD_CONTAINER" -- cloud-init status --wait 2>/dev/null || true
+        # Ensure the shell is responsive before returning
+        lxc exec "$GH_LXD_CONTAINER" -- sh -c "true"
+
+    - name: Create user
+      if: ${{ inputs.user != '' }}
+      shell: bash
+      env:
+        CONTAINER_USER: ${{ inputs.user }}
+      run: |
+        RUNNER_UID=$(id -u)
+        # Use the runner's UID so mounted workspace files are already owned by this user
+        lxc exec "$GH_LXD_CONTAINER" -- sh -c "
+          if command -v useradd >/dev/null 2>&1; then
+            useradd -m -u '$RUNNER_UID' -s /bin/bash '$CONTAINER_USER'
+          else
+            adduser -D -u '$RUNNER_UID' '$CONTAINER_USER'
+          fi
+        "
+        # Allow non-root user to traverse into /root/project
+        lxc exec "$GH_LXD_CONTAINER" -- chmod o+rx /root

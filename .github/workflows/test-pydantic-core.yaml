@@ -1,0 +1,79 @@
+name: Test (pydantic/pydantic-core)
+
+on:
+  push:
+    branches: [main]
+    paths: [launch/**, exec/**, stop/**]
+  pull_request:
+    paths: [launch/**, exec/**, stop/**]
+  workflow_dispatch:
+
+# Tests a Rust + Python project built with maturin across multiple distros.
+# This exercises Rust toolchain installation and cross-distro package management.
+jobs:
+  test:
+    name: ${{ matrix.distro }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        distro:
+          - ubuntu/22.04
+          - ubuntu/24.04
+          - ubuntu/25.10
+          - ubuntu/26.04
+          - debian/12
+          - debian/13
+          - fedora/43
+          - fedora/44
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Launch container
+        uses: ./launch
+        with:
+          image: ${{ matrix.distro }}
+
+      - name: Install system dependencies
+        uses: ./exec
+        with:
+          run: |
+            if command -v apt-get >/dev/null; then
+              apt-get update -y
+              apt-get install -y git python3 python3-pip python3-venv curl build-essential
+            elif command -v dnf >/dev/null; then
+              dnf install -y git python3 python3-pip curl gcc
+            fi
+
+      - name: Install Rust
+        uses: ./exec
+        with:
+          run: |
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+              | sh -s -- -y --default-toolchain stable
+            ln -sf /root/.cargo/bin/* /usr/local/bin/
+
+      - name: Clone
+        uses: ./exec
+        with:
+          run: git clone --depth=1 https://github.com/pydantic/pydantic-core /pydantic-core
+
+      - name: Install Python dependencies
+        uses: ./exec
+        with:
+          working-directory: /pydantic-core
+          run: |
+            python3 -m venv .venv
+            .venv/bin/pip install --upgrade pip maturin
+            .venv/bin/pip install -e ".[testing]"
+
+      - name: Run tests
+        uses: ./exec
+        with:
+          working-directory: /pydantic-core
+          run: .venv/bin/pytest
+
+      - name: Stop container
+        if: always()
+        uses: ./stop

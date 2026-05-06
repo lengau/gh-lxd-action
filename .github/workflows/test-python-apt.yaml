@@ -1,0 +1,68 @@
+name: Test (python-apt)
+
+on:
+  push:
+    branches: [main]
+    paths: [launch/**, exec/**, stop/**]
+  pull_request:
+    paths: [launch/**, exec/**, stop/**]
+  workflow_dispatch:
+
+# Tests a Python package with C++ bindings against libapt-pkg. Restricted to
+# Ubuntu and Debian because python-apt is APT-specific.
+jobs:
+  test:
+    name: ${{ matrix.distro }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        distro:
+          - ubuntu/22.04
+          - ubuntu/24.04
+          - ubuntu/25.10
+          - ubuntu/26.04
+          - debian/12
+          - debian/13
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Launch container
+        uses: ./launch
+        with:
+          image: ${{ matrix.distro }}
+
+      - name: Install git
+        uses: ./exec
+        with:
+          run: |
+            apt-get update -y
+            apt-get install -y git
+
+      - name: Clone
+        uses: ./exec
+        with:
+          run: git clone --depth=1 https://salsa.debian.org/apt-team/python-apt.git /python-apt
+
+      - name: Install build dependencies
+        uses: ./exec
+        with:
+          working-directory: /python-apt
+          run: apt-get build-dep -y ./
+
+      - name: Build
+        uses: ./exec
+        with:
+          working-directory: /python-apt
+          run: python3 setup.py build
+
+      - name: Run tests
+        uses: ./exec
+        with:
+          working-directory: /python-apt
+          run: python3 tests/test_all.py
+
+      - name: Stop container
+        if: always()
+        uses: ./stop
