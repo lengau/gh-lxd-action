@@ -38,29 +38,24 @@ jobs:
         with:
           run: |
             apt-get update -y
-            apt-get install -y \
-              git python3 python3-pip python3-venv \
-              libxml2-dev libxslt1-dev intltool
+            apt-get install -y git make python3 python3-pip python3-venv
 
       - name: Clone
         uses: ./exec
         with:
           run: git clone --depth=1 https://github.com/canonical/craft-parts /craft-parts
 
-      - name: Install Python dependencies
+      - name: Setup
         uses: ./exec
         with:
           working-directory: /craft-parts
-          run: |
-            python3 -m venv .venv
-            .venv/bin/pip install --upgrade pip
-            .venv/bin/pip install -e ".[dev]"
+          run: make setup
 
-      - name: Run unit tests
+      - name: Run tests
         uses: ./exec
         with:
           working-directory: /craft-parts
-          run: .venv/bin/pytest tests/unit -x -q
+          run: make test-fast
 
       - name: Stop container
         if: always()

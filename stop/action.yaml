@@ -23,8 +23,8 @@ runs:
           CONTAINERS=$(lxc list --format csv -c n)
           COUNT=$(printf '%s\n' "$CONTAINERS" | grep -c .)
           if [ "$COUNT" -eq 0 ]; then
-            echo "::error::No LXD containers found." >&2
-            exit 1
+            echo "::warning::No LXD containers found; nothing to stop."
+            exit 0
           elif [ "$COUNT" -gt 1 ]; then
             echo "::error::Multiple LXD containers found; specify the 'container' input." >&2
             exit 1

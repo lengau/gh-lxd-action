@@ -28,7 +28,6 @@ jobs:
           - fedora/44
           - almalinux/8
           - almalinux/9
-          - almalinux/10
           - alpine/3.21
           - alpine/3.22
           - alpine/3.23

@@ -27,7 +27,6 @@ jobs:
           # AlmaLinux
           - almalinux/8
           - almalinux/9
-          - almalinux/10
           # Alpine Linux
           - alpine/3.21
           - alpine/3.22
