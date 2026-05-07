@@ -50,11 +50,16 @@ runs:
           fi
           CONTAINER="$CONTAINERS"
         fi
+        if [ -n "$CONTAINER_USER" ]; then
+          SCRIPT_DIR="/home/$CONTAINER_USER/gh-lxd-action"
+        else
+          SCRIPT_DIR="/root/gh-lxd-action"
+        fi
         SCRIPT=$(mktemp)
         printf '%s\n' "$GH_LXD_RUN" > "$SCRIPT"
-        lxc file push "$SCRIPT" "${CONTAINER}/var/tmp/gh-lxd-exec.sh"
+        lxc file push -p "$SCRIPT" "${CONTAINER}${SCRIPT_DIR}/exec.sh"
         rm -f "$SCRIPT"
-        SHELL_CMD="${GH_LXD_SHELL//\{0\}/\/var\/tmp\/gh-lxd-exec.sh}"
+        SHELL_CMD="${GH_LXD_SHELL//\{0\}/${SCRIPT_DIR}\/exec.sh}"
         if [ -n "$CONTAINER_USER" ]; then
           # UID matches the runner's UID, set at container creation time
           lxc exec --user "$(id -u)" "$CONTAINER" -- sh -c "cd '$WORKING_DIR' && $SHELL_CMD"
