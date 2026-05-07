@@ -22,6 +22,11 @@ inputs:
   working-directory:
     description: Working directory inside the container.
     default: /root/project
+  env:
+    description: >
+      Additional environment variables to pass into the container, as a
+      newline-separated list of KEY=VALUE pairs. Works the same as the `env`
+      key on a GitHub Actions step.
 
 runs:
   using: composite
@@ -34,6 +39,7 @@ runs:
         WORKING_DIR: ${{ inputs.working-directory }}
         GH_LXD_SHELL: ${{ inputs.shell }}
         GH_LXD_RUN: ${{ inputs.run }}
+        GH_LXD_ENV: ${{ inputs.env }}
       run: |
         if [ -z "$CONTAINER" ]; then
           CONTAINER="${GH_LXD_CONTAINER:-}"
@@ -60,9 +66,19 @@ runs:
         lxc file push -p "$SCRIPT" "${CONTAINER}${SCRIPT_DIR}/exec.sh"
         rm -f "$SCRIPT"
         SHELL_CMD="${GH_LXD_SHELL//\{0\}/${SCRIPT_DIR}\/exec.sh}"
+        # Build --env flags: always forward CI and GITHUB_* vars, plus user-specified vars
+        ENV_ARGS=()
+        for var in CI GITHUB_ACTIONS GITHUB_WORKSPACE GITHUB_SHA GITHUB_REF \
+                   GITHUB_REPOSITORY GITHUB_RUN_ID GITHUB_RUN_NUMBER \
+                   RUNNER_OS RUNNER_ARCH RUNNER_TEMP; do
+          [ -n "${!var+x}" ] && ENV_ARGS+=(--env "${var}=${!var}")
+        done
+        while IFS= read -r line; do
+          [ -n "$line" ] && ENV_ARGS+=(--env "$line")
+        done <<< "$GH_LXD_ENV"
         if [ -n "$CONTAINER_USER" ]; then
           # UID matches the runner's UID, set at container creation time
-          lxc exec --user "$(id -u)" "$CONTAINER" -- sh -c "cd '$WORKING_DIR' && $SHELL_CMD"
+          lxc exec "${ENV_ARGS[@]}" --user "$(id -u)" "$CONTAINER" -- sh -c "cd '$WORKING_DIR' && $SHELL_CMD"
         else
-          lxc exec "$CONTAINER" -- sh -c "cd '$WORKING_DIR' && $SHELL_CMD"
+          lxc exec "${ENV_ARGS[@]}" "$CONTAINER" -- sh -c "cd '$WORKING_DIR' && $SHELL_CMD"
         fi
